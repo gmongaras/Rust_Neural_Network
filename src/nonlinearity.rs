@@ -19,7 +19,7 @@ impl Nonlinearity {
         Nonlinearity { function_name }
     }
 
-    pub fn forward(self, x: Matrix<f32>) -> Matrix<f32>
+    pub fn forward(&self, x: Matrix<f32>) -> Matrix<f32>
     {
         match self.function_name.as_str() {
             "relu" => relu(x),
@@ -28,7 +28,7 @@ impl Nonlinearity {
         }
     }
 
-    pub fn backward(self, x: Matrix<f32>) -> Matrix<f32>
+    pub fn backward(&self, x: Matrix<f32>) -> Matrix<f32>
     {
         match self.function_name.as_str() {
             "relu" => relu_backward(x),
@@ -57,7 +57,7 @@ fn relu(x: Matrix<f32>) -> Matrix<f32>
     let mut result: Matrix<f32> = Matrix::zeros(x.dim1, x.dim2);
     for i in 0..x.dim1 {
         for j in 0..x.dim2 {
-            result[i][j] = if x[i][j] > 0.0 { x[i][j].clone() } else { 0.0 };
+            result[i][j] = if x[i][j] > 0.0 { x[i][j] } else { 0.0 };
         }
     }
     result

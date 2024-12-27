@@ -1,4 +1,5 @@
 use std::vec;
+use rayon::prelude::*;
 
 pub struct Matrix<mat_type> {
     pub data: Vec<Vec<mat_type>>,
@@ -9,7 +10,7 @@ pub struct Matrix<mat_type> {
 
 
 // Implement methods for the Matrix struct
-impl<mat_type: Clone + Default> Matrix<mat_type> {
+impl<mat_type: Clone + Default + Copy> Matrix<mat_type> {
     // Constructors
     pub fn new(data: Vec<Vec<mat_type>>) -> Self {
         let dim1 = data.len();
@@ -19,7 +20,7 @@ impl<mat_type: Clone + Default> Matrix<mat_type> {
         Matrix { data, dim1, dim2, shape: vec![dim1, dim2] }
     }
     pub fn zeros(dim1: usize, dim2: usize) -> Self {
-        let data: Vec<Vec<mat_type>> = vec![vec![mat_type::default(); dim2]; dim1];
+        let mut data: Vec<Vec<mat_type>> = vec![vec![mat_type::default(); dim2]; dim1];
         Matrix { data, dim1, dim2, shape: vec![dim1, dim2] }
     }
 
@@ -37,7 +38,7 @@ impl<mat_type: Clone + Default> Matrix<mat_type> {
         let mut result = Matrix::zeros(self.dim2, self.dim1);
         for i in 0..self.dim1 {
             for j in 0..self.dim2 {
-                result.data[j][i] = self.data[i][j].clone();
+                result.data[j][i] = self.data[i][j];
             }
         }
         result
@@ -59,9 +60,35 @@ impl<mat_type: Clone + Default> Matrix<mat_type> {
         // Perform the matrix addition
         for i in 0..self.dim1 {
             for j in 0..self.dim2 {
-                result.data[i][j] = self.data[i][j].clone() * other.data[i][j].clone();
+                result.data[i][j] = self.data[i][j] * other.data[i][j];
             }
         }
+
+        // Return the result
+        result
+    }
+
+
+    // Multiply the matrix, but transposed
+    pub fn mult_transpose(&self, other: &Matrix<mat_type>) -> Matrix<mat_type> 
+    where
+        mat_type: std::ops::Mul<Output = mat_type> + std::ops::AddAssign + Default + Copy + Send + Sync,
+    {
+        // dim2 of the first matrix must be equal to dim2 of the second matrix
+        assert_eq!(self.dim2, other.dim2);
+        
+        // Create a new matrix of zeros
+        let mut result = Matrix::zeros(self.dim1, other.dim1);
+
+        // Perform the matrix multiplication
+        result.data.par_iter_mut().enumerate().for_each(|(i, row)| {
+            for k in 0..other.dim2 {
+                let temp = self.data[i][k];
+                for j in 0..other.dim1 {
+                    row[j] += temp * other.data[j][k];
+                }
+            }
+        });
 
         // Return the result
         result
@@ -83,16 +110,15 @@ impl<mat_type: std::fmt::Display> std::fmt::Display for Matrix<mat_type> {
 }
 
 
-
 // Overload the * operator for matrix multiplication
-impl<mat_type> std::ops::Mul for Matrix<mat_type> 
+impl<mat_type> std::ops::Mul for &Matrix<mat_type> 
 where
-    mat_type: std::ops::Mul<Output = mat_type> + std::ops::AddAssign + Clone + Default,
+    mat_type: std::ops::Mul<Output = mat_type> + std::ops::AddAssign + Default + Copy + Send + Sync,
 {
     // Define the output type
     type Output = Matrix<mat_type>;
 
-    fn mul(self, other: Matrix<mat_type>) -> Matrix<mat_type> {
+    fn mul(self, other: &Matrix<mat_type>) -> Matrix<mat_type> {
         // dim2 of the first matrix must be equal to dim1 of the second matrix
         assert_eq!(self.dim2, other.dim1);
         
@@ -100,29 +126,62 @@ where
         let mut result = Matrix::zeros(self.dim1, other.dim2);
 
         // Perform the matrix multiplication
-        for i in 0..self.dim1 {
-            for j in 0..other.dim2 {
-                for k in 0..other.dim1 {
-                    result.data[i][j] += self.data[i][k].clone() * other.data[k][j].clone();
+        result.data.par_iter_mut().enumerate().for_each(|(i, row)| {
+            for k in 0..other.dim1 {
+                let temp = self.data[i][k];
+                for j in 0..other.dim2 {
+                    row[j] += temp * other.data[k][j];
                 }
             }
-        }
+        });
 
         // Return the result
         result
     }
 }
+
+
+// Multiplication with a reference
+impl<mat_type> std::ops::Mul<&Matrix<mat_type>> for Matrix<mat_type> 
+where
+    mat_type: std::ops::Mul<Output = mat_type> + std::ops::AddAssign + Default + Copy + Send + Sync,
+{
+    // Define the output type
+    type Output = Matrix<mat_type>;
+
+    fn mul(self, other: &Matrix<mat_type>) -> Matrix<mat_type> {
+        // dim2 of the first matrix must be equal to dim1 of the second matrix
+        assert_eq!(self.dim2, other.dim1);
+        
+        // Create a new matrix of zeros
+        let mut result = Matrix::zeros(self.dim1, other.dim2);
+
+        // Perform the matrix multiplication
+        result.data.par_iter_mut().enumerate().for_each(|(i, row)| {
+            for k in 0..other.dim1 {
+                let temp = self.data[i][k];
+                for j in 0..other.dim2 {
+                    row[j] += temp * other.data[k][j];
+                }
+            }
+        });
+
+        // Return the result
+        result
+    }
+}
+
 
 
 // Overload the + operator for matrix addition
-impl<mat_type> std::ops::Add for Matrix<mat_type> 
+impl<mat_type> std::ops::Add for &Matrix<mat_type> 
 where
-    mat_type: std::ops::Add<Output = mat_type> + Clone + Default,
+    mat_type: std::ops::Add<Output = mat_type> + Default + Copy,
 {
     // Define the output type
     type Output = Matrix<mat_type>;
 
-    fn add(self, other: Matrix<mat_type>) -> Matrix<mat_type> {
+    fn add(self, other: &Matrix<mat_type>) -> Matrix<mat_type> {
         // The matrices must have the same shape
         assert_eq!(self.shape[1], other.shape[1]);
 
@@ -134,15 +193,56 @@ where
             for j in 0..self.dim2 {
                 // Index is 0 if this is a vector
                 if self.dim1 == 1 {
-                    result.data[0][j] = self.data[0][j].clone() + other.data[i][j].clone();
+                    result.data[0][j] = self.data[0][j] + other.data[i][j];
                     continue;
                 }
                 else if other.dim1 == 1 {
-                    result.data[i][j] = self.data[i][j].clone() + other.data[0][j].clone();
+                    result.data[i][j] = self.data[i][j] + other.data[0][j];
                     continue;
                 }
                 else {
-                    result.data[i][j] = self.data[i][j].clone() + other.data[i][j].clone();
+                    result.data[i][j] = self.data[i][j] + other.data[i][j];
+                }
+            }
+        }
+
+        // Return the result
+        result
+    }
+}
+
+
+
+
+// Addition with a reference
+impl<mat_type> std::ops::Add<&Matrix<mat_type>> for Matrix<mat_type> 
+where
+    mat_type: std::ops::Add<Output = mat_type> + Default + Copy,
+{
+    // Define the output type
+    type Output = Matrix<mat_type>;
+
+    fn add(self, other: &Matrix<mat_type>) -> Matrix<mat_type> {
+        // The matrices must have the same shape
+        assert_eq!(self.shape[1], other.shape[1]);
+
+        // Create a new matrix of zeros
+        let mut result = Matrix::zeros(self.dim1, self.dim2);
+
+        // Perform the matrix addition
+        for i in 0..self.dim1 {
+            for j in 0..self.dim2 {
+                // Index is 0 if this is a vector
+                if self.dim1 == 1 {
+                    result.data[0][j] = self.data[0][j] + other.data[i][j];
+                    continue;
+                }
+                else if other.dim1 == 1 {
+                    result.data[i][j] = self.data[i][j] + other.data[0][j];
+                    continue;
+                }
+                else {
+                    result.data[i][j] = self.data[i][j] + other.data[i][j];
                 }
             }
         }
@@ -156,15 +256,15 @@ where
 
 
 
-// Overload the - operator for matrix addition
-impl<mat_type> std::ops::Sub for Matrix<mat_type> 
+// Overload the - operator for matrix subtraction
+impl<mat_type> std::ops::Sub for &Matrix<mat_type> 
 where
-    mat_type: std::ops::Sub<Output = mat_type> + Clone + Default,
+    mat_type: std::ops::Sub<Output = mat_type> + Default + Copy,
 {
     // Define the output type
     type Output = Matrix<mat_type>;
 
-    fn sub(self, other: Matrix<mat_type>) -> Matrix<mat_type> {
+    fn sub(self, other: &Matrix<mat_type>) -> Matrix<mat_type> {
         // The matrices must have the same shape
         assert_eq!(self.shape[1], other.shape[1]);
 
@@ -176,21 +276,53 @@ where
             for j in 0..self.dim2 {
                 // Index is 0 if this is a vector
                 if self.dim1 == 1 {
-                    result.data[0][j] = self.data[0][j].clone() - other.data[i][j].clone();
+                    result.data[0][j] = self.data[0][j] - other.data[i][j];
                     continue;
                 }
                 else if other.dim1 == 1 {
-                    result.data[i][j] = self.data[i][j].clone() - other.data[0][j].clone();
+                    result.data[i][j] = self.data[i][j] - other.data[0][j];
                     continue;
                 }
                 else {
-                    result.data[i][j] = self.data[i][j].clone() - other.data[i][j].clone();
+                    result.data[i][j] = self.data[i][j] - other.data[i][j];
                 }
             }
         }
 
         // Return the result
         result
+    }
+}
+
+
+
+
+// Subassign overload for the Matrix struct
+impl<mat_type> std::ops::SubAssign for Matrix<mat_type> 
+where
+    mat_type: std::ops::SubAssign + Default + Copy,
+{
+    fn sub_assign(&mut self, other: Matrix<mat_type>) {
+        // The matrices must have the same shape
+        assert_eq!(self.shape[1], other.shape[1]);
+
+        // Perform the matrix addition
+        for i in 0..self.dim1 {
+            for j in 0..self.dim2 {
+                // Index is 0 if this is a vector
+                if self.dim1 == 1 {
+                    self.data[0][j] -= other.data[i][j];
+                    continue;
+                }
+                else if other.dim1 == 1 {
+                    self.data[i][j] -= other.data[0][j];
+                    continue;
+                }
+                else {
+                    self.data[i][j] -= other.data[i][j];
+                }
+            }
+        }
     }
 }
 

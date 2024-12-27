@@ -61,7 +61,7 @@ impl Network {
     }
 
     // Forward pass
-    pub fn forward(&mut self, x: Matrix<f32>) -> Matrix<f32> {
+    pub fn forward(&mut self, x: &Matrix<f32>) -> Matrix<f32> {
         // Perform the forward pass
         let mut result: Matrix<f32> = x.clone();
         let mut intermediates_prelayer: Vec<Matrix<f32>> = Vec::new(); // Saves all intermediate results
@@ -69,14 +69,14 @@ impl Network {
             // Save the intermediate result (before the linear layer)
             intermediates_prelayer.push(result.clone());
 
-            result = self.layers[i].clone().forward(result);
+            result = self.layers[i].forward(&result);
 
             // Save the intermediate result (before the nonlinearity)
             self.intermediates_preactivation.push(result.clone());
 
             // Apply the nonlinearity
             if i < self.layers.len() - 1 { // Only apply nonlinearity to hidden layers
-                result = self.nonlinearity.clone().forward(result);
+                result = self.nonlinearity.forward(result);
             }
         }
 
@@ -89,34 +89,33 @@ impl Network {
 
 
     // Backward pass
-    pub fn backward(&mut self, output: Matrix<f32>, y: Matrix<f32>, learning_rate: f32, clip_value: f32) {
+    pub fn backward(&mut self, output: &Matrix<f32>, y: &Matrix<f32>, learning_rate: f32, clip_value: f32) {
         // Perform the backward pass
-        let mut gradient: Matrix<f32> = self.cross_entropy_loss_gradient(output, y.clone());
+        let mut gradient: Matrix<f32> = self.cross_entropy_loss_gradient(output, y);
         for i in (0..self.layers.len()).rev() {
 
             // If not the last layer, then we need apply the backward nonlinearity
             if i < self.layers.len() - 1 {
-                let act_grad = self.nonlinearity.clone().backward(self.intermediates_preactivation[i].clone());
+                let act_grad = self.nonlinearity.backward(self.intermediates_preactivation[i].clone());
 
                 // Perform a Hadamard product with the gradient
-                gradient = gradient.hadamard(act_grad.clone());
+                gradient = gradient.hadamard(act_grad);
             }
 
             // Get the intermediates at this layer
             let intermediates = self.intermediates_prelayer[i].clone();
 
             // Update the weights and get the gradient wrt. X
-            let (next_gradient, new_layer) = self.layers[i].clone().backward(intermediates, gradient.clone(), learning_rate, clip_value);
-            self.layers[i] = new_layer;
+            let next_gradient = self.layers[i].backward(&intermediates, &gradient, learning_rate, clip_value);
 
             // Update the gradient for the next layer
-            gradient = next_gradient.clone();
+            gradient = next_gradient;
         }
     }
 
 
     // Cross entropy loss function
-    pub fn cross_entropy_loss(&self, output: Matrix<f32>, y: Matrix<f32>) -> f32 {
+    pub fn cross_entropy_loss(&self, output: &Matrix<f32>, y: &Matrix<f32>) -> f32 {
         // Compute the cross entropy loss
         let mut loss: f32 = 0.0;
         for i in 0..output.dim1 { // Iterate over the batch
@@ -137,7 +136,7 @@ impl Network {
 
 
 
-    pub fn cross_entropy_loss_gradient(&self, output: Matrix<f32>, y: Matrix<f32>) -> Matrix<f32> {
+    pub fn cross_entropy_loss_gradient(&self, output: &Matrix<f32>, y: &Matrix<f32>) -> Matrix<f32> {
         // Initialize a matrix to store the gradients
         let mut gradient = Matrix::zeros(output.dim1, output.dim2);
     

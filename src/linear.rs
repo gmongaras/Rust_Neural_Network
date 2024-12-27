@@ -42,15 +42,18 @@ impl Linear {
 
     // Forward is a matrix multiplication
     // Note that the weights are always transposed for the matmul
-    pub fn forward(self, x: Matrix<f32>) -> Matrix<f32> {
-        (x * self.weights) + self.bias
+    pub fn forward(&self, x: &Matrix<f32>) -> Matrix<f32> {
+        let mut y = x.clone();
+        y = y * &self.weights;
+        y = y + &self.bias;
+        y
     }
 
 
     // Backward pass
-    pub fn backward(self, x: Matrix<f32>, gradient: Matrix<f32>, learning_rate: f32, clip_value: f32) -> (Matrix<f32>, Linear) {
+    pub fn backward(&mut self, x: &Matrix<f32>, gradient: &Matrix<f32>, learning_rate: f32, clip_value: f32) -> Matrix<f32> {
         // Compute the gradient for the weights
-        let mut weights_gradient = x.transpose() * gradient.clone();
+        let mut weights_gradient = x.transpose() * &gradient;
         let mut bias_gradient = Matrix::zeros(1, gradient.dim2);
         for i in 0..gradient.dim1 {
             for j in 0..gradient.dim2 {
@@ -87,26 +90,17 @@ impl Linear {
         }
 
         // Compute the gradient for the next layer
-        let next_gradient = gradient.clone() * self.weights.clone().transpose();
+        let next_gradient = gradient.mult_transpose(&self.weights);
 
-        // Update the weights and bias
-        let mut new_linear = self.clone();
-        new_linear.weights = self.weights.clone() - weights_gradient.clone();
-        new_linear.bias = self.bias.clone() - bias_gradient.clone();
+        // // Update the weights and bias
+        // let mut new_linear = self.clone();
+        // new_linear.weights = self.weights.clone() - weights_gradient.clone();
+        // new_linear.bias = self.bias.clone() - bias_gradient.clone();
+        // Update the weights and bias without copying
+        (*self).weights -= weights_gradient;
+        (*self).bias -= bias_gradient;
 
-        (next_gradient, new_linear)
-    }
-}
-
-
-
-
-// Overload the Copy trait for Linear
-impl Clone for Linear {
-    fn clone(&self) -> Self {
-        Linear {
-            weights: self.weights.clone(),
-            bias: self.bias.clone(),
-        }
+        // Return the gradient for the next layer
+        next_gradient
     }
 }

@@ -38,7 +38,7 @@ fn shuffle_data_and_labels(train_data: &mut Vec<Vec<f32>>, train_labels: &mut Ve
 
 
 
-fn calculate_accuracy(output: Matrix<f32>, labels: Matrix<f32>) -> f32 {
+fn calculate_accuracy(output: &Matrix<f32>, labels: &Matrix<f32>) -> f32 {
     let mut correct: f32 = 0.0;
     let mut total: f32 = 0.0;
 
@@ -155,27 +155,26 @@ fn main() {
             // Get the batch data
             let mut batch_data: Vec<Vec<f32>> = Vec::new();
             let mut batch_labels: Vec<Vec<f32>> = Vec::new();
-            for i in 0..batch_size {
-                let index = batch * batch_size + i;
-                batch_data.push(train_data[index].clone());
-                batch_labels.push(train_labels[index].clone());
-            }
+            let start_index = batch * batch_size;
+            let end_index = (batch + 1) * batch_size;
+            batch_data = train_data[start_index..end_index].to_vec();
+            batch_labels = train_labels[start_index..end_index].to_vec();
 
             // Convert to matrices
-            let x: Matrix<f32> = Matrix::new(batch_data.clone());
-            let y: Matrix<f32> = Matrix::new(batch_labels.clone());
+            let x: Matrix<f32> = Matrix::new(batch_data);
+            let y: Matrix<f32> = Matrix::new(batch_labels);
 
             // Forward pass
-            let mut output: Matrix<f32> = model.forward(x.clone());
+            let mut output: Matrix<f32> = model.forward(&x);
 
             // Get the loss
-            let loss: f32 = model.cross_entropy_loss(output.clone(), y.clone());
+            let loss: f32 = model.cross_entropy_loss(&output, &y);
 
             // Backward pass
-            model.backward(output.clone(), y.clone(), learning_rate, clip_value);
+            model.backward(&output, &y, learning_rate, clip_value);
 
             // Accuracy
-            let accuracy: f32 = calculate_accuracy(output.clone(), y.clone());
+            let accuracy: f32 = calculate_accuracy(&output, &y);
 
             // Update the total loss and accuracy
             total_loss += loss;
@@ -185,7 +184,7 @@ fn main() {
         }
 
         // Total loss and accuracy
-        println!("Epoch {}, Total Loss: {}, Total Accuracy: {}", epoch, total_loss/num_batches as f32, total_accuracy/num_batches as f32);
+        println!("Epoch {}, Average Loss: {}, Average Accuracy: {}", epoch, total_loss/num_batches as f32, total_accuracy/num_batches as f32);
 
 
 
@@ -197,24 +196,23 @@ fn main() {
             // Get the batch data
             let mut batch_data: Vec<Vec<f32>> = Vec::new();
             let mut batch_labels: Vec<Vec<f32>> = Vec::new();
-            for i in 0..batch_size {
-                let index = batch * batch_size + i;
-                batch_data.push(test_data[index].clone());
-                batch_labels.push(test_labels[index].clone());
-            }
+            let start_index = batch * batch_size;
+            let end_index = (batch + 1) * batch_size;
+            batch_data = test_data[start_index..end_index].to_vec();
+            batch_labels = test_labels[start_index..end_index].to_vec();
 
             // Convert to matrices
-            let x: Matrix<f32> = Matrix::new(batch_data.clone());
-            let y: Matrix<f32> = Matrix::new(batch_labels.clone());
+            let x: Matrix<f32> = Matrix::new(batch_data);
+            let y: Matrix<f32> = Matrix::new(batch_labels);
 
             // Forward pass
-            let output: Matrix<f32> = model.forward(x.clone());
+            let output: Matrix<f32> = model.forward(&x);
 
             // Get the loss
-            let loss: f32 = model.cross_entropy_loss(output.clone(), y.clone());
+            let loss: f32 = model.cross_entropy_loss(&output, &y);
 
             // Accuracy
-            let accuracy: f32 = calculate_accuracy(output.clone(), y.clone());
+            let accuracy: f32 = calculate_accuracy(&output, &y);
 
             total_loss += loss;
             total_accuracy += accuracy;
